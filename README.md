@@ -58,7 +58,7 @@ The script checks for these at startup and tells you what's missing.
 
 ### WiFi password
 
-If you set `requiredNetwork`, the script will prompt for the password on first use and store it in your **login keychain**. Subsequent runs read it silently. If the connection fails, the stored password is cleared so you get prompted again.
+If you set `requiredNetwork`, the script will prompt for the password on first use. The password is only saved to your **login keychain** after the connection is verified — if the network name is wrong or the password is rejected, nothing gets stored and you'll be prompted again next time.
 
 ### Using with Sonos
 
@@ -94,6 +94,7 @@ Logs are written to `/tmp/mpv-loudness.log`.
 ## Troubleshooting
 
 - **mpv exits immediately** — check the terminal tab for error output. Usually a yt-dlp or format issue.
+- **WiFi verification fails** — the error dialog shows both the expected and actual network name. Double-check `requiredNetwork` in the config matches your SSID exactly.
 - **No audio on speaker** — verify the speaker name matches exactly what Airfoil shows. The script warns if the speaker isn't found or fails to connect.
 - **Volume adjustment fails** — check `/tmp/mpv-loudness.log`. Common causes: network timeout, geo-blocked video, or ffmpeg issue.
 - **"Allow JavaScript" prompt** — enable it in your browser's developer menu (see Browser setup above). The script can find tabs without it, but can't pause the browser video.
