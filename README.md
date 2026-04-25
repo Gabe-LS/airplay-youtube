@@ -1,4 +1,4 @@
-# airplay-youtube
+# AirPlay YouTube
 
 A macOS automation that grabs a YouTube URL from your browser and plays it in [mpv](https://mpv.io) with hardware-accelerated decoding, optional AirPlay audio routing via [Airfoil](https://rogueamoeba.com/airfoil/mac/), and automatic volume adjustment for quiet videos.
 

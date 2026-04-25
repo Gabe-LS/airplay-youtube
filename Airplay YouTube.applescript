@@ -1,5 +1,5 @@
 -- =============================================================================
--- airplay-youtube.applescript
+-- AirPlay YouTube
 --
 -- Plays a YouTube video from Brave, Chrome, or Safari in mpv with optional
 -- AirPlay audio routing via Airfoil and automatic volume adjustment for
@@ -124,7 +124,7 @@ try
 			
 			if wifiPassword is "" then
 				-- No stored password — ask the user
-				set passwordDialog to display dialog "Enter WiFi password for " & requiredNetwork & ":" default answer "" buttons {"Cancel", "OK"} default button "OK" with hidden answer
+				set passwordDialog to display dialog "Enter WiFi password for " & requiredNetwork & ":" default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK"
 				set wifiPassword to text returned of passwordDialog
 				if wifiPassword is "" then
 					display dialog "No password entered" buttons {"OK"} default button "OK"
