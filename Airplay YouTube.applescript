@@ -124,7 +124,7 @@ try
 			
 			if wifiPassword is "" then
 				-- No stored password — ask the user
-				set passwordDialog to display dialog "Enter WiFi password for " & requiredNetwork & ":" default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK"
+				set passwordDialog to display dialog "Enter WiFi password for " & requiredNetwork & ":" default answer "" buttons {"Cancel", "OK"} default button "OK" with hidden answer
 				set wifiPassword to text returned of passwordDialog
 				if wifiPassword is "" then
 					display dialog "No password entered" buttons {"OK"} default button "OK"
