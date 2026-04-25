@@ -1,104 +1,184 @@
 # AirPlay YouTube
 
-A macOS automation that grabs a YouTube URL from your browser and plays it in [mpv](https://mpv.io) with hardware-accelerated decoding, optional AirPlay audio routing via [Airfoil](https://rogueamoeba.com/airfoil/mac/), and automatic volume adjustment for quiet videos.
+Play a YouTube video from your browser in a dedicated player, with the option to send audio to a wireless speaker (Sonos, HomePod, Apple TV, or any AirPlay receiver).
 
-I built this to watch YouTube on my Mac while routing audio to a Sonos speaker over AirPlay. It works with any AirPlay receiver — Sonos, HomePod, Apple TV, or anything else Airfoil can see.
+I built this to watch YouTube on my Mac while routing audio to a Sonos speaker in another room. It also automatically turns up the volume on quiet videos so you don't have to.
+
+---
 
 ## What it does
 
-1. **Finds your YouTube tab** across Brave, Chrome, and Safari — auto-selects the active tab, or shows a picker if there are multiple
-2. **Pauses the browser video** to avoid double audio
-3. **Preserves the timestamp** (`t=` parameter) so playback resumes where you left off
-4. **Launches mpv** in iTerm or Terminal.app with a minimal config (no OSC, custom keybindings, capped resolution)
-5. **Routes audio** to an AirPlay speaker via Airfoil *(optional)*
-6. **Switches WiFi** to a specific network before playback *(optional)*
-7. **Adjusts volume for quiet videos** — measures LUFS in the background and applies a linear gain offset to bring quiet videos up to −14 LUFS (YouTube's target). No compression or dynamic processing — just a volume change, clamped by a true-peak ceiling. Never attenuates.
+1. Finds your YouTube tab in Brave, Chrome, or Safari
+2. Pauses the browser video so you don't get double audio
+3. Opens the video in [mpv](https://mpv.io) — a fast, lightweight video player
+4. If you were partway through the video, it picks up where you left off
+5. Optionally sends audio to a wireless speaker via [Airfoil](https://rogueamoeba.com/airfoil/mac/)
+6. Optionally switches your WiFi network before playing
+7. Automatically boosts the volume on quiet videos (no audio processing — just turns up the volume)
 
-## Requirements
+---
 
-- macOS (tested on Sonoma / Sequoia)
-- [Homebrew](https://brew.sh) (Apple Silicon or Intel — auto-detected)
-- At least one of: [Brave](https://brave.com), Chrome, or Safari
-- [Airfoil](https://rogueamoeba.com/airfoil/mac/) *(only if you want AirPlay speaker routing)*
-- [iTerm2](https://iterm2.com) *(optional — falls back to Terminal.app)*
+## Before you start
 
-### Browser setup
+You need a Mac running macOS Sonoma or later, and [Homebrew](https://brew.sh) — a tool that installs command-line software on macOS.
 
-JavaScript from Apple Events must be enabled for the script to pause the browser video and detect tabs:
+**Check if Homebrew is installed:** open the Terminal app (press `Command + Space`, type `Terminal`, press Enter), then type:
 
-- **Brave / Chrome:** View → Developer → Allow JavaScript from Apple Events
-- **Safari:** Develop → Allow JavaScript from Apple Events
+```
+brew --version
+```
 
-The script still works without this — it just can't pause the video in the browser.
+If you see a version number, you're good. If you see "command not found", install Homebrew by following the instructions at [brew.sh](https://brew.sh).
 
-### Homebrew dependencies
+---
 
-```bash
+## Step 1 — Install dependencies
+
+Open Terminal and run:
+
+```
 brew install mpv yt-dlp ffmpeg python3
 ```
 
-The script checks for these at startup and tells you what's missing.
+This installs the video player and the tools it needs. You only need to do this once.
 
-## Setup
+---
 
-1. Clone or download `airplay-youtube.applescript`
-2. Open it and edit the **Configuration** block at the top:
+## Step 2 — Enable JavaScript in your browser
 
-| Variable | Default | Description |
+This lets the script find your YouTube tabs and pause the browser video. Pick the browser you use:
+
+- **Brave or Chrome:** go to View → Developer → Allow JavaScript from Apple Events
+- **Safari:** go to Develop → Allow JavaScript from Apple Events
+
+> **Safari note:** if you don't see the Develop menu, go to Safari → Settings → Advanced and check "Show features for web developers".
+
+The script still works without this step — it just won't be able to pause the video in the browser automatically.
+
+---
+
+## Step 3 — Download the script
+
+1. Click the green **Code** button at the top of this page
+2. Click **Download ZIP**
+3. Unzip the file — you'll get a folder containing `AirPlay YouTube.applescript`
+
+Or if you use git:
+
+```
+git clone https://github.com/Gabe-LS/airplay-youtube.git
+```
+
+---
+
+## Step 4 — Configure (optional)
+
+Open `AirPlay YouTube.applescript` in any text editor. At the top you'll find a **Configuration** section. The defaults work out of the box — you only need to change things if you want to use a wireless speaker or auto-switch WiFi.
+
+### Play audio on a wireless speaker
+
+If you have [Airfoil](https://rogueamoeba.com/airfoil/mac/) and want to route audio to a speaker, change these two lines:
+
+```applescript
+set speakerName to "Kitchen"   -- use the name that appears in Airfoil
+set audioDelay to "-2"         -- adjust if audio is out of sync (seconds)
+```
+
+This works with any AirPlay receiver — Sonos, HomePod, Apple TV, etc. The `audioDelay` value compensates for the slight delay that AirPlay adds. Start with `"-2"` and adjust if needed.
+
+### Auto-switch WiFi
+
+If your speaker is on a different WiFi network, you can have the script switch automatically:
+
+```applescript
+set requiredNetwork to "MyNetwork_5G"   -- your WiFi network name
+```
+
+The first time, the script will ask for the WiFi password and save it to your keychain. The password is only saved after the connection is verified — if the network name is wrong, nothing gets stored.
+
+### All settings
+
+| Setting | Default | What it does |
 |---|---|---|
-| `requiredNetwork` | `""` | WiFi network to switch to before playback. Leave empty to skip. |
-| `speakerName` | `""` | Airfoil speaker name (e.g. `"Kitchen"`). Leave empty to play locally. |
-| `speakerVolume` | `0.2` | AirPlay speaker volume (0.0–1.0) |
-| `audioDelay` | `"-2"` | Seconds to shift audio earlier. Only applied when Airfoil is active. Tune to your speaker's latency. |
-| `maxVideoHeight` | `1080` | Cap video resolution (e.g. `720`, `1080`, `1440`) |
-| `targetLUFS` | `"-14"` | Target loudness. Videos quieter than this get a volume boost. `-14` is YouTube's standard. |
-| `peakCeiling` | `"-1"` | Max true peak (dBTP) after boost. Caps the gain to prevent clipping. |
+| `speakerName` | `""` | Airfoil speaker name. Leave empty to play audio on your Mac. |
+| `speakerVolume` | `0.2` | Speaker volume, from 0.0 (silent) to 1.0 (full). |
+| `audioDelay` | `"-2"` | Shift audio earlier to compensate for AirPlay lag. Only used with a speaker. |
+| `requiredNetwork` | `""` | WiFi network to connect to before playing. Leave empty to skip. |
+| `maxVideoHeight` | `1080` | Maximum video quality. Use `720` for slower connections. |
+| `targetLUFS` | `"-14"` | How loud quiet videos should be boosted to. `-14` is YouTube's standard. |
+| `peakCeiling` | `"-1"` | Safety limit to prevent distortion when boosting volume. |
 
-3. Run it from Script Editor, `osascript`, Shortcuts, or any AppleScript runner
+---
 
-### WiFi password
+## Step 5 — Run
 
-If you set `requiredNetwork`, the script will prompt for the password on first use. The password is only saved to your **login keychain** after the connection is verified — if the network name is wrong or the password is rejected, nothing gets stored and you'll be prompted again next time.
+1. Open a YouTube video in Brave, Chrome, or Safari
+2. Open `AirPlay YouTube.applescript` in Script Editor (double-click it)
+3. Click the ▶ Run button
 
-### Using with Sonos
+The video will open in mpv. If you have multiple YouTube tabs open, the script will ask you to pick one.
 
-Set `speakerName` to the name of your Sonos speaker as it appears in Airfoil (e.g. `"Kitchen"`, `"Living Room"`). Airfoil routes audio to Sonos over AirPlay — no Sonos app or API involved. You may need to adjust `audioDelay` to compensate for your speaker's AirPlay latency (start with `"-2"` and tune from there).
+### Other ways to run
 
-## Keybindings
+- **From Terminal:** `osascript "AirPlay YouTube.applescript"`
+- **From Shortcuts:** add a "Run AppleScript" action and paste the script
+- **From the menu bar:** save as an application in Script Editor (File → Export → File Format: Application)
 
-mpv launches with a minimal input config:
+---
 
-| Key | Action |
+## Keyboard controls
+
+Once the video is playing in mpv:
+
+| Key | What it does |
 |---|---|
 | Space | Play / Pause |
-| ↑ / ↓ | Volume ±2 |
-| ← / → | Seek ±5s |
-| F | Toggle fullscreen |
+| ↑ / ↓ | Volume up / down |
+| ← / → | Skip 5 seconds back / forward |
+| F | Fullscreen |
 | Esc | Exit fullscreen |
 | Q | Quit |
-| M | Toggle mute |
-| O | Show progress |
-| Double-click | Toggle fullscreen |
+| M | Mute / Unmute |
+| O | Show playback progress |
+| Double-click | Fullscreen |
 
-## How volume adjustment works
+---
 
-A background Python script downloads the audio-only stream (piped through ffmpeg, nothing saved to disk) and measures integrated LUFS and true peak via ffmpeg's `ebur128` filter. It then calculates a single linear gain offset — the difference between the measured loudness and the target (−14 LUFS). This is applied by adjusting mpv's volume slider, not by processing the audio signal. No compression, limiting, or dynamic range manipulation of any kind.
+## Something not working?
+
+- **mpv closes right away** — look at the terminal window behind it for an error message. This is usually a network or video format issue.
+- **WiFi won't connect** — the error will show both the expected and actual network name, so you can spot any typo in the config.
+- **No audio on speaker** — make sure `speakerName` matches exactly what Airfoil shows. The script will warn you if the speaker isn't found.
+- **Video is still quiet** — check `/tmp/mpv-loudness.log` for details. Common causes: slow connection, geo-blocked video, or a problem with ffmpeg.
+- **Browser video doesn't pause** — enable JavaScript from Apple Events in your browser (see Step 2).
+
+---
+
+## Features
+
+- Works with Brave, Chrome, and Safari
+- Picks up where the video left off (preserves timestamps)
+- Uses iTerm if available, falls back to Terminal.app
+- Boosts quiet videos to a consistent volume (linear gain only — no compression or audio processing)
+- Homebrew path auto-detected (works on both Apple Silicon and Intel Macs)
+- WiFi password stored securely in the macOS keychain
+
+<details>
+<summary>How volume adjustment works (technical)</summary>
+
+A background Python script downloads the audio-only stream (piped through ffmpeg, nothing saved to disk) and measures integrated LUFS and true peak via ffmpeg's `ebur128` filter. It calculates a single linear gain offset — the difference between the measured loudness and the target (−14 LUFS). This is applied by adjusting mpv's volume slider, not by processing the audio signal. No compression, limiting, or dynamic range manipulation of any kind.
 
 - **Boost only** — if the video is already at or above −14 LUFS, nothing happens
 - **Peak-clamped** — gain is limited so true peaks never exceed the ceiling (default −1 dBTP)
 - **Smooth ramp** — volume adjusts gradually over several seconds via mpv's IPC socket
-- **OSD overlay** — a small status indicator shows measurement progress and final values
+- **OSD overlay** — a small status indicator shows measurement progress and results
 
 Logs are written to `/tmp/mpv-loudness.log`.
 
-## Troubleshooting
+</details>
 
-- **mpv exits immediately** — check the terminal tab for error output. Usually a yt-dlp or format issue.
-- **WiFi verification fails** — the error dialog shows both the expected and actual network name. Double-check `requiredNetwork` in the config matches your SSID exactly.
-- **No audio on speaker** — verify the speaker name matches exactly what Airfoil shows. The script warns if the speaker isn't found or fails to connect.
-- **Volume adjustment fails** — check `/tmp/mpv-loudness.log`. Common causes: network timeout, geo-blocked video, or ffmpeg issue.
-- **"Allow JavaScript" prompt** — enable it in your browser's developer menu (see Browser setup above). The script can find tabs without it, but can't pause the browser video.
+---
 
 ## License
 
-MIT
+MIT License — Copyright (c) 2025 Gabriele Lo Surdo
