@@ -33,30 +33,126 @@
 -- =============================================================================
 
 -- =============================================================================
--- CONFIGURATION
+-- CONFIGURATION (defaults — override any of these in airplay_youtube.config.json)
 -- =============================================================================
 set mpvTabTitle to "MPV Player" -- Tab identifier for terminal session
 
 -- WiFi — set to "" to skip network switching
-set requiredNetwork to "TP-Link_265F_6G" -- e.g. "MyNetwork_5G"
+set requiredNetwork to "" -- e.g. "MyNetwork_5G"
 
 -- Airfoil — set speakerName to "" to skip audio routing (plays locally)
 -- Works with any AirPlay receiver: Sonos, HomePod, Apple TV, etc.
-set speakerName to "Kitchen" -- e.g. "Kitchen", "Living Room"
-set speakerVolume to 0.2 -- Speaker volume (0.0 to 1.0)
+set speakerName to "" -- e.g. "Kitchen", "Living Room"
 set audioDelay to "-2" -- Audio delay in seconds (negative = audio plays earlier, compensating for AirPlay speaker latency)
+
+-- Speaker volume (0.0 to 1.0) — time-based day/night levels
+-- Day volume applies from dayStart to nightStart (24h format), night volume for the rest.
+-- Set both to the same value for a single fixed volume.
+set dayVolume to 0.2
+set nightVolume to 0.15
+set dayStart to "07:00"
+set nightStart to "23:30"
 
 -- Video
 set maxVideoHeight to 1080 -- Maximum video resolution
 
 -- Cache
-set cacheSize to "200M" -- Demuxer max bytes
+set cacheSize to "50M" -- Demuxer max bytes
 set cacheReadahead to "10" -- Demuxer readahead seconds
-set cachePauseWait to "10" -- Seconds to wait when cache is empty
+set cachePauseWait to "5" -- Seconds to wait when cache is empty
 
 -- Volume adjustment for quiet videos (linear gain only, no compression, boost only, never attenuates)
 set targetLUFS to "-14" -- Target integrated loudness (LUFS), YouTube default
 set peakCeiling to "-1" -- Maximum true peak after gain (dBTP), prevents distortion
+
+-- =============================================================================
+-- LOAD CONFIG FILE (if present next to the script)
+-- =============================================================================
+
+-- Looks for airplay_youtube.config.json in the same folder as this script.
+-- Any keys in the JSON override the defaults above. Unknown keys are ignored.
+-- If the file doesn't exist, the defaults are used as-is.
+--
+-- Path detection tries multiple methods:
+--   1. path to me — works for osascript and .app bundles
+--   2. Script Editor document path — works when running from Script Editor
+try
+	set configPath to ""
+	
+	-- Method 1: path to me (works for osascript and .app bundles)
+	try
+		set myPath to POSIX path of (path to me)
+		-- Skip if this points to an .app bundle (Script Editor, Shortcuts, etc.)
+		if myPath does not end with ".app/" and myPath does not contain ".app/Contents" then
+			set scriptDir to do shell script "dirname " & quoted form of myPath
+			set testPath to scriptDir & "/airplay_youtube.config.json"
+			if (do shell script "test -f " & quoted form of testPath & " && echo yes || echo no") is "yes" then
+				set configPath to testPath
+			end if
+		end if
+	end try
+	
+	-- Method 2: Script Editor document path
+	if configPath is "" then
+		try
+			tell application "System Events"
+				if exists process "Script Editor" then
+					tell application "Script Editor"
+						set docPath to path of front document
+					end tell
+					set scriptDir to do shell script "dirname " & quoted form of docPath
+					set testPath to scriptDir & "/airplay_youtube.config.json"
+					if (do shell script "test -f " & quoted form of testPath & " && echo yes || echo no") is "yes" then
+						set configPath to testPath
+					end if
+				end if
+			end tell
+		end try
+	end if
+	
+	if configPath is not "" then
+		-- Parse JSON with python3 and output key=value pairs
+		set configPairs to do shell script "python3 -c \"
+import json, sys
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+for k, v in data.items():
+    if isinstance(v, str):
+        print(f'{k}={v}')
+    elif isinstance(v, bool):
+        print(f'{k}={str(v).lower()}')
+    elif isinstance(v, (int, float)):
+        print(f'{k}={v}')
+\" " & quoted form of configPath
+		
+		-- Apply each key=value pair to the matching variable
+		repeat with configLine in paragraphs of configPairs
+			set configLine to configLine as text
+			if configLine is "" then
+				-- skip empty lines
+			else
+				set delimOffset to offset of "=" in configLine
+				set configKey to text 1 thru (delimOffset - 1) of configLine
+				set configVal to text (delimOffset + 1) thru -1 of configLine
+				
+				if configKey is "mpvTabTitle" then set mpvTabTitle to configVal
+				if configKey is "requiredNetwork" then set requiredNetwork to configVal
+				if configKey is "speakerName" then set speakerName to configVal
+				if configKey is "audioDelay" then set audioDelay to configVal
+				if configKey is "dayVolume" then set dayVolume to (run script "return " & configVal)
+				if configKey is "nightVolume" then set nightVolume to (run script "return " & configVal)
+				if configKey is "dayStart" then set dayStart to configVal
+				if configKey is "nightStart" then set nightStart to configVal
+				if configKey is "maxVideoHeight" then set maxVideoHeight to (run script "return " & configVal)
+				if configKey is "cacheSize" then set cacheSize to configVal
+				if configKey is "cacheReadahead" then set cacheReadahead to configVal
+				if configKey is "cachePauseWait" then set cachePauseWait to configVal
+				if configKey is "targetLUFS" then set targetLUFS to configVal
+				if configKey is "peakCeiling" then set peakCeiling to configVal
+			end if
+		end repeat
+	end if
+end try
 
 -- =============================================================================
 -- MAIN SCRIPT (wrapped in top-level error handler)
@@ -124,7 +220,7 @@ try
 			
 			if wifiPassword is "" then
 				-- No stored password — ask the user
-				set passwordDialog to display dialog "Enter WiFi password for " & requiredNetwork & ":" default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK"
+				set passwordDialog to display dialog "Enter WiFi password for " & requiredNetwork & ":" default answer "" buttons {"Cancel", "OK"} default button "OK" with hidden answer
 				set wifiPassword to text returned of passwordDialog
 				if wifiPassword is "" then
 					display dialog "No password entered" buttons {"OK"} default button "OK"
@@ -464,6 +560,8 @@ UP add volume 2
 DOWN add volume -2
 RIGHT seek 5
 LEFT seek -5
+Shift+RIGHT seek 60
+Shift+LEFT seek -60
 f cycle fullscreen
 ESC set fullscreen no
 q quit
@@ -862,6 +960,34 @@ ANALYZER"
 	if mpvWindowVisible then
 		-- Configure audio routing through Airfoil (only if speaker is configured)
 		if useAirfoil then
+			-- Resolve speaker volume based on time of day
+			set currentHour to hours of (current date)
+			set currentMin to minutes of (current date)
+			set nowMins to currentHour * 60 + currentMin
+			
+			set AppleScript's text item delimiters to ":"
+			set dayParts to text items of dayStart
+			set nightParts to text items of nightStart
+			set AppleScript's text item delimiters to ""
+			set dayMins to ((item 1 of dayParts) as integer) * 60 + ((item 2 of dayParts) as integer)
+			set nightMins to ((item 1 of nightParts) as integer) * 60 + ((item 2 of nightParts) as integer)
+			
+			if dayMins < nightMins then
+				-- Normal case: day 07:00 → 23:30
+				if nowMins ≥ dayMins and nowMins < nightMins then
+					set speakerVolume to dayVolume
+				else
+					set speakerVolume to nightVolume
+				end if
+			else
+				-- Inverted case: day wraps past midnight (e.g. day=22:00, night=06:00)
+				if nowMins ≥ nightMins and nowMins < dayMins then
+					set speakerVolume to nightVolume
+				else
+					set speakerVolume to dayVolume
+				end if
+			end if
+			
 			tell application "Airfoil"
 				-- Specify mpv as audio source
 				set pathToApp to brewBin & "/mpv"

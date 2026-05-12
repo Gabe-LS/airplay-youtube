@@ -73,25 +73,35 @@ git clone https://github.com/Gabe-LS/airplay-youtube.git
 
 ## Step 4 — Configure (optional)
 
-Open `AirPlay YouTube.applescript` in any text editor. At the top you'll find a **Configuration** section. The defaults work out of the box — you only need to change things if you want to use a wireless speaker or auto-switch WiFi.
+The defaults work out of the box — you only need to change things if you want to use a wireless speaker or auto-switch WiFi.
+
+To customize, create a file called `airplay_youtube.config.json` in the same folder as the script. Only include the settings you want to change — everything else uses the defaults. An example file (`airplay_youtube.config.example.json`) is included in the repo.
 
 ### Play audio on a wireless speaker
 
-If you have [Airfoil](https://rogueamoeba.com/airfoil/mac/) and want to route audio to a speaker, change these two lines:
+If you have [Airfoil](https://rogueamoeba.com/airfoil/mac/) and want to route audio to a speaker, create `airplay_youtube.config.json` with:
 
-```applescript
-set speakerName to "Kitchen"   -- use the name that appears in Airfoil
-set audioDelay to "-2"         -- adjust if audio is out of sync (seconds)
+```json
+{
+  "speakerName": "Kitchen",
+  "dayVolume": 0.2,
+  "nightVolume": 0.15,
+  "dayStart": "07:00",
+  "nightStart": "23:30"
+}
 ```
 
-This works with any AirPlay receiver — Sonos, HomePod, Apple TV, etc. The `audioDelay` value compensates for the slight delay that AirPlay adds. Start with `"-2"` and adjust if needed.
+This works with any AirPlay receiver — Sonos, HomePod, Apple TV, etc. Set both volumes to the same value if you don't want time-based changes. You may need to adjust `audioDelay` to compensate for the slight delay that AirPlay adds — start with `"-2"` and tune from there.
 
 ### Auto-switch WiFi
 
-If your speaker is on a different WiFi network, you can have the script switch automatically:
+If your speaker is on a different WiFi network:
 
-```applescript
-set requiredNetwork to "MyNetwork_5G"   -- your WiFi network name
+```json
+{
+  "speakerName": "Kitchen",
+  "requiredNetwork": "MyNetwork_5G"
+}
 ```
 
 The first time, the script will ask for the WiFi password and save it to your keychain. The password is only saved after the connection is verified — if the network name is wrong, nothing gets stored.
@@ -100,11 +110,16 @@ The first time, the script will ask for the WiFi password and save it to your ke
 
 | Setting | Default | What it does |
 |---|---|---|
-| `speakerName` | `""` | Airfoil speaker name. Leave empty to play audio on your Mac. |
-| `speakerVolume` | `0.2` | Speaker volume, from 0.0 (silent) to 1.0 (full). |
-| `audioDelay` | `"-2"` | Shift audio earlier to compensate for AirPlay lag. Only used with a speaker. |
 | `requiredNetwork` | `""` | WiFi network to connect to before playing. Leave empty to skip. |
+| `speakerName` | `""` | Airfoil speaker name. Leave empty to play audio on your Mac. |
+| `audioDelay` | `"-2"` | Shift audio earlier to compensate for AirPlay lag. Only used with a speaker. |
+| `dayVolume` | `0.2` | Speaker volume during the day, from 0.0 (silent) to 1.0 (full). |
+| `nightVolume` | `0.15` | Speaker volume at night. |
+| `dayStart` | `"07:00"` | When daytime volume kicks in (24h format). |
+| `nightStart` | `"23:30"` | When nighttime volume kicks in (24h format). |
 | `maxVideoHeight` | `1080` | Maximum video quality. Use `720` for slower connections. |
+| `cacheSize` | `"50M"` | How much video to buffer in memory. |
+| `cachePauseWait` | `"5"` | Seconds to re-buffer after a network stall before resuming. |
 | `targetLUFS` | `"-14"` | How loud quiet videos should be boosted to. `-14` is YouTube's standard. |
 | `peakCeiling` | `"-1"` | Safety limit to prevent distortion when boosting volume. |
 
@@ -135,6 +150,7 @@ Once the video is playing in mpv:
 | Space | Play / Pause |
 | ↑ / ↓ | Volume up / down |
 | ← / → | Skip 5 seconds back / forward |
+| Shift + ← / → | Skip 60 seconds back / forward |
 | F | Fullscreen |
 | Esc | Exit fullscreen |
 | Q | Quit |
@@ -162,6 +178,7 @@ Once the video is playing in mpv:
 - Boosts quiet videos to a consistent volume (linear gain only — no compression or audio processing)
 - Homebrew path auto-detected (works on both Apple Silicon and Intel Macs)
 - WiFi password stored securely in the macOS keychain
+- Day/night speaker volume schedule — plays quieter at night automatically
 
 <details>
 <summary>How volume adjustment works (technical)</summary>

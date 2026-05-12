@@ -1,0 +1,16 @@
+{
+  "mpvTabTitle": "MPV Player",
+  "requiredNetwork": "",
+  "speakerName": "Kitchen",
+  "audioDelay": "-2",
+  "dayVolume": 0.2,
+  "nightVolume": 0.15,
+  "dayStart": "07:00",
+  "nightStart": "23:30",
+  "maxVideoHeight": 1080,
+  "cacheSize": "50M",
+  "cacheReadahead": "10",
+  "cachePauseWait": "5",
+  "targetLUFS": "-14",
+  "peakCeiling": "-1"
+}
