@@ -72,14 +72,9 @@ set peakCeiling to "-1" -- Maximum true peak after gain (dBTP), prevents distort
 -- Looks for airplay_youtube.config.json in the same folder as this script.
 -- Any keys in the JSON override the defaults above. Unknown keys are ignored.
 -- If the file doesn't exist, the defaults are used as-is.
---
--- Path detection tries multiple methods:
---   1. path to me — works for osascript and .app bundles
---   2. Script Editor document path — works when running from Script Editor
 try
 	set configPath to ""
 	
-	-- Method 1: path to me (works for osascript and .app bundles)
 	try
 		set myPath to POSIX path of (path to me)
 		-- Skip if this points to an .app bundle (Script Editor, Shortcuts, etc.)
@@ -91,24 +86,6 @@ try
 			end if
 		end if
 	end try
-	
-	-- Method 2: Script Editor document path
-	if configPath is "" then
-		try
-			tell application "System Events"
-				if exists process "Script Editor" then
-					tell application "Script Editor"
-						set docPath to path of front document
-					end tell
-					set scriptDir to do shell script "dirname " & quoted form of docPath
-					set testPath to scriptDir & "/airplay_youtube.config.json"
-					if (do shell script "test -f " & quoted form of testPath & " && echo yes || echo no") is "yes" then
-						set configPath to testPath
-					end if
-				end if
-			end tell
-		end try
-	end if
 	
 	if configPath is not "" then
 		-- Parse JSON with python3 and output key=value pairs
@@ -220,7 +197,7 @@ try
 			
 			if wifiPassword is "" then
 				-- No stored password — ask the user
-				set passwordDialog to display dialog "Enter WiFi password for " & requiredNetwork & ":" default answer "" buttons {"Cancel", "OK"} default button "OK" with hidden answer
+				set passwordDialog to display dialog "Enter WiFi password for " & requiredNetwork & ":" default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK"
 				set wifiPassword to text returned of passwordDialog
 				if wifiPassword is "" then
 					display dialog "No password entered" buttons {"OK"} default button "OK"
@@ -275,7 +252,7 @@ try
 	-- FIND YOUTUBE VIDEO IN BROWSERS
 	-- =========================================================================
 	
-	-- Detect running browsers
+	-- Detect running browsers via System Events (no app launches)
 	tell application "System Events"
 		set appNames to name of every application process whose background only is false
 	end tell
@@ -290,93 +267,153 @@ try
 	
 	set ytTabs to {}
 	set ytURLs to {}
-	set ytTabRefs to {}
 	set ytIsActive to {}
 	set ytBrowsers to {}
 	
-	-- Helper: check if URL is a YouTube video (not Music)
-	-- Used by all browser scan blocks below
-	script ytHelper
-		on isYouTubeVideo(tabURL)
-			return (tabURL contains "youtube.com" or tabURL contains "youtu.be") and tabURL does not contain "music.youtube.com"
-		end isYouTubeVideo
-		
-		on cleanTabTitle(rawTitle)
-			set cleaned to rawTitle
-			-- Strip " - YouTube" suffix
-			if cleaned ends with " - YouTube" then
-				set cleaned to text 1 thru -11 of cleaned
-			end if
-			-- Remove notification count prefix (e.g., "(1) " or "(23) ")
-			set cleaned to do shell script "echo " & quoted form of cleaned & " | sed -E 's/^\\([0-9]+\\) //'"
-			return cleaned
-		end cleanTabTitle
-	end script
+	-- Each browser scan runs in a subprocess via osascript to avoid launching
+	-- non-running browsers. Returns tab data as tab-delimited lines:
+	-- title<TAB>url<TAB>isActive
 	
 	-- Scan Brave
 	if braveRunning then
-		tell application "Brave Browser"
-			if (count of windows) > 0 then
-				set activeTabURL to URL of active tab of front window
-				repeat with w in windows
-					repeat with t in tabs of w
-						set tabURL to URL of t
-						if ytHelper's isYouTubeVideo(tabURL) then
-							set cleanTitle to ytHelper's cleanTabTitle(title of t)
-							set end of ytTabs to cleanTitle
-							set end of ytURLs to tabURL
-							set end of ytTabRefs to t
-							set end of ytIsActive to (tabURL is activeTabURL)
-							set end of ytBrowsers to "brave"
-						end if
-					end repeat
-				end repeat
-			end if
-		end tell
+		try
+			set braveData to do shell script "osascript -e '
+				tell application \"Brave Browser\"
+					if (count of windows) > 0 then
+						set activeURL to URL of active tab of front window
+						set output to \"\"
+						repeat with w in windows
+							repeat with t in tabs of w
+								set tabURL to URL of t
+								if tabURL contains \"youtube.com\" or tabURL contains \"youtu.be\" then
+									if tabURL does not contain \"music.youtube.com\" then
+										set tabTitle to title of t
+										if tabURL is activeURL then
+											set output to output & tabTitle & (character id 9) & tabURL & (character id 9) & \"1\" & linefeed
+										else
+											set output to output & tabTitle & (character id 9) & tabURL & (character id 9) & \"0\" & linefeed
+										end if
+									end if
+								end if
+							end repeat
+						end repeat
+						return output
+					end if
+				end tell
+			'"
+			repeat with dataLine in paragraphs of braveData
+				set dataLine to dataLine as text
+				if dataLine is not "" then
+					set AppleScript's text item delimiters to tab
+					set parts to text items of dataLine
+					set AppleScript's text item delimiters to ""
+					if (count of parts) ≥ 3 then
+						-- Clean title
+						set rawTitle to item 1 of parts
+						if rawTitle ends with " - YouTube" then set rawTitle to text 1 thru -11 of rawTitle
+						set rawTitle to do shell script "echo " & quoted form of rawTitle & " | sed -E 's/^\\([0-9]+\\) //'"
+						set end of ytTabs to rawTitle
+						set end of ytURLs to item 2 of parts
+						set end of ytIsActive to (item 3 of parts is "1")
+						set end of ytBrowsers to "brave"
+					end if
+				end if
+			end repeat
+		end try
 	end if
 	
 	-- Scan Chrome
 	if chromeRunning then
-		tell application "Google Chrome"
-			if (count of windows) > 0 then
-				set activeTabURL to URL of active tab of front window
-				repeat with w in windows
-					repeat with t in tabs of w
-						set tabURL to URL of t
-						if ytHelper's isYouTubeVideo(tabURL) then
-							set cleanTitle to ytHelper's cleanTabTitle(title of t)
-							set end of ytTabs to cleanTitle
-							set end of ytURLs to tabURL
-							set end of ytTabRefs to t
-							set end of ytIsActive to (tabURL is activeTabURL)
-							set end of ytBrowsers to "chrome"
-						end if
-					end repeat
-				end repeat
-			end if
-		end tell
+		try
+			set chromeData to do shell script "osascript -e '
+				tell application \"Google Chrome\"
+					if (count of windows) > 0 then
+						set activeURL to URL of active tab of front window
+						set output to \"\"
+						repeat with w in windows
+							repeat with t in tabs of w
+								set tabURL to URL of t
+								if tabURL contains \"youtube.com\" or tabURL contains \"youtu.be\" then
+									if tabURL does not contain \"music.youtube.com\" then
+										set tabTitle to title of t
+										if tabURL is activeURL then
+											set output to output & tabTitle & (character id 9) & tabURL & (character id 9) & \"1\" & linefeed
+										else
+											set output to output & tabTitle & (character id 9) & tabURL & (character id 9) & \"0\" & linefeed
+										end if
+									end if
+								end if
+							end repeat
+						end repeat
+						return output
+					end if
+				end tell
+			'"
+			repeat with dataLine in paragraphs of chromeData
+				set dataLine to dataLine as text
+				if dataLine is not "" then
+					set AppleScript's text item delimiters to tab
+					set parts to text items of dataLine
+					set AppleScript's text item delimiters to ""
+					if (count of parts) ≥ 3 then
+						set rawTitle to item 1 of parts
+						if rawTitle ends with " - YouTube" then set rawTitle to text 1 thru -11 of rawTitle
+						set rawTitle to do shell script "echo " & quoted form of rawTitle & " | sed -E 's/^\\([0-9]+\\) //'"
+						set end of ytTabs to rawTitle
+						set end of ytURLs to item 2 of parts
+						set end of ytIsActive to (item 3 of parts is "1")
+						set end of ytBrowsers to "chrome"
+					end if
+				end if
+			end repeat
+		end try
 	end if
 	
-	-- Scan Safari (different API: name not title, current tab not active tab, do JavaScript not execute)
+	-- Scan Safari (different API: name not title, current tab not active tab)
 	if safariRunning then
-		tell application "Safari"
-			if (count of windows) > 0 then
-				set activeTabURL to URL of current tab of front window
-				repeat with w in windows
-					repeat with t in tabs of w
-						set tabURL to URL of t
-						if ytHelper's isYouTubeVideo(tabURL) then
-							set cleanTitle to ytHelper's cleanTabTitle(name of t)
-							set end of ytTabs to cleanTitle
-							set end of ytURLs to tabURL
-							set end of ytTabRefs to t
-							set end of ytIsActive to (tabURL is activeTabURL)
-							set end of ytBrowsers to "safari"
-						end if
-					end repeat
-				end repeat
-			end if
-		end tell
+		try
+			set safariData to do shell script "osascript -e '
+				tell application \"Safari\"
+					if (count of windows) > 0 then
+						set activeURL to URL of current tab of front window
+						set output to \"\"
+						repeat with w in windows
+							repeat with t in tabs of w
+								set tabURL to URL of t
+								if tabURL contains \"youtube.com\" or tabURL contains \"youtu.be\" then
+									if tabURL does not contain \"music.youtube.com\" then
+										set tabTitle to name of t
+										if tabURL is activeURL then
+											set output to output & tabTitle & (character id 9) & tabURL & (character id 9) & \"1\" & linefeed
+										else
+											set output to output & tabTitle & (character id 9) & tabURL & (character id 9) & \"0\" & linefeed
+										end if
+									end if
+								end if
+							end repeat
+						end repeat
+						return output
+					end if
+				end tell
+			'"
+			repeat with dataLine in paragraphs of safariData
+				set dataLine to dataLine as text
+				if dataLine is not "" then
+					set AppleScript's text item delimiters to tab
+					set parts to text items of dataLine
+					set AppleScript's text item delimiters to ""
+					if (count of parts) ≥ 3 then
+						set rawTitle to item 1 of parts
+						if rawTitle ends with " - YouTube" then set rawTitle to text 1 thru -11 of rawTitle
+						set rawTitle to do shell script "echo " & quoted form of rawTitle & " | sed -E 's/^\\([0-9]+\\) //'"
+						set end of ytTabs to rawTitle
+						set end of ytURLs to item 2 of parts
+						set end of ytIsActive to (item 3 of parts is "1")
+						set end of ytBrowsers to "safari"
+					end if
+				end if
+			end repeat
+		end try
 	end if
 	
 	if (count of ytTabs) is 0 then
@@ -386,12 +423,10 @@ try
 	
 	-- Selection priority: active tab > single tab > prompt
 	set selectedURL to ""
-	set selectedTab to missing value
 	set selectedBrowser to ""
 	
 	if (count of ytTabs) is 1 then
 		set selectedURL to item 1 of ytURLs
-		set selectedTab to item 1 of ytTabRefs
 		set selectedBrowser to item 1 of ytBrowsers
 	else
 		-- Check for an active YouTube tab (auto-select if exactly one)
@@ -406,7 +441,6 @@ try
 		
 		if activeCount is 1 then
 			set selectedURL to item activeIndex of ytURLs
-			set selectedTab to item activeIndex of ytTabRefs
 			set selectedBrowser to item activeIndex of ytBrowsers
 		else
 			-- Prompt with numbered list showing browser tags
@@ -419,7 +453,6 @@ try
 			if selectedItem is false then return
 			set selectedIndex to (do shell script "echo " & quoted form of (item 1 of selectedItem) & " | cut -d'.' -f1") as integer
 			set selectedURL to item selectedIndex of ytURLs
-			set selectedTab to item selectedIndex of ytTabRefs
 			set selectedBrowser to item selectedIndex of ytBrowsers
 		end if
 	end if
@@ -430,32 +463,61 @@ try
 		if shortsChoice is "Cancel" then return
 	end if
 	
-	-- Pause video playback in browser
-	-- Brave/Chrome require a tell block around the tab for execute javascript (the "in" parameter form fails silently)
-	-- Safari uses "do JavaScript" instead of "execute javascript"
+	-- Pause video playback in browser (subprocess to avoid launching non-running browsers)
+	-- URL is passed as argv to osascript to avoid quoting hell
 	if selectedBrowser is "brave" then
 		try
-			tell application "Brave Browser"
-				tell selectedTab
-					execute javascript "document.querySelector('video').pause();"
-				end tell
-			end tell
+			do shell script "osascript - " & quoted form of selectedURL & " << 'SCPT'
+on run argv
+	set targetURL to item 1 of argv
+	tell application \"Brave Browser\"
+		repeat with w in windows
+			repeat with t in tabs of w
+				if URL of t is targetURL then
+					tell t to execute javascript \"document.querySelector('video').pause();\"
+					return
+				end if
+			end repeat
+		end repeat
+	end tell
+end run
+SCPT"
 		end try
 	else if selectedBrowser is "chrome" then
 		try
-			tell application "Google Chrome"
-				tell selectedTab
-					execute javascript "document.querySelector('video').pause();"
-				end tell
-			end tell
+			do shell script "osascript - " & quoted form of selectedURL & " << 'SCPT'
+on run argv
+	set targetURL to item 1 of argv
+	tell application \"Google Chrome\"
+		repeat with w in windows
+			repeat with t in tabs of w
+				if URL of t is targetURL then
+					tell t to execute javascript \"document.querySelector('video').pause();\"
+					return
+				end if
+			end repeat
+		end repeat
+	end tell
+end run
+SCPT"
 		end try
 	else if selectedBrowser is "safari" then
 		try
-			tell application "Safari"
-				tell selectedTab
-					do JavaScript "document.querySelector('video').pause();"
-				end tell
-			end tell
+			do shell script "osascript - " & quoted form of selectedURL & " << 'SCPT'
+on run argv
+	set targetURL to item 1 of argv
+	tell application \"Safari\"
+		repeat with w in windows
+			repeat with t in tabs of w
+				if URL of t is targetURL then
+					tell t to do JavaScript \"document.querySelector('video').pause();\"
+					return
+				end if
+			end repeat
+		end repeat
+	end tell
+end run
+SCPT"
 		end try
 	end if
 	delay 0.5
